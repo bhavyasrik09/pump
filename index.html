@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR Mini Lathe Digital Twin</title>
+
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+
+<!-- Firebase v10 -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCwYkwI7sJiWZc_UNv-hiUCYvWQ9Kac-pA",
+  authDomain: "minilathedigitaltwin.firebaseapp.com",
+  databaseURL: "https://minilathedigitaltwin-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "minilathedigitaltwin",
+  storageBucket: "minilathedigitaltwin.firebasestorage.app",
+  messagingSenderId: "117431183861",
+  appId: "1:117431183861:web:b798d793e20f064b8b18bc"
+};
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+const liveRef = ref(database, "latheData/1");
+
+let temperature = 0;
+let vibration = 0;
+let runtime = 0;
+
+onValue(liveRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    temperature = parseFloat(data.temperature ?? 0);
+    vibration = parseFloat(data.vibration ?? 0);
+    runtime = parseFloat(data.runtime_seconds ?? 0);
+
+    document.getElementById("temp").innerText = temperature.toFixed(1);
+    document.getElementById("vib").innerText = vibration.toFixed(2);
+    document.getElementById("runtime").innerText = runtime;
+
+    updateStatus();
+    updateModelColor();
+});
+
+function updateStatus() {
+    const status = document.getElementById("status");
+
+    if (temperature > 85 || vibration > 1.8 || runtime > 5000) {
+        status.innerText = "CRITICAL";
+        status.style.background = "#ef4444";
+    }
+    else if (temperature > 65 || vibration > 1.0 || runtime > 3000) {
+        status.innerText = "WARNING";
+        status.style.background = "#eab308";
+    }
+    else {
+        status.innerText = "NORMAL";
+        status.style.background = "#22c55e";
+    }
+}
+
+function updateModelColor() {
+    const model = document.querySelector("#latheModel");
+
+    let healthFactor = Math.min(1, (temperature - 35) / 60);
+    let r = Math.floor(255 * healthFactor);
+    let g = Math.floor(255 * (1 - healthFactor));
+    let color = `rgb(${r},${g},0)`;
+
+    model.setAttribute("material", "color", color);
+}
+</script>
+
+<style>
+body { margin:0; overflow:hidden; font-family:Arial; }
+
+#dashboard {
+  position:absolute;
+  top:10px;
+  left:10px;
+  width:70vw;
+  max-width:260px;
+  background:rgba(0,0,0,0.85);
+  padding:12px;
+  border-radius:10px;
+  color:white;
+  z-index:10;
+  font-size:14px;
+}
+
+.status {
+  padding:8px;
+  margin-top:10px;
+  text-align:center;
+  font-weight:bold;
+  border-radius:6px;
+}
+</style>
+
+<script>
+// ================= PLAY ALL GLB ANIMATIONS =================
+AFRAME.registerComponent('play-all-animations', {
+  init: function () {
+    this.el.addEventListener('model-loaded', () => {
+      const mesh = this.el.getObject3D('mesh');
+      if (!mesh.animations || mesh.animations.length === 0) return;
+
+      const mixer = new THREE.AnimationMixer(mesh);
+      mesh.animations.forEach((clip) => {
+        mixer.clipAction(clip).play();
+      });
+
+      this.mixer = mixer;
+    });
+  },
+  tick: function (t, dt) {
+    if (this.mixer) this.mixer.update(dt / 1000);
+  }
+});
+
+// ================= DRAG ROTATION =================
+AFRAME.registerComponent('drag-rotate', {
+  init: function () {
+    this.isDragging = false;
+    this.velocityX = 0;
+    this.velocityY = 0;
+    this.lastX = 0;
+    this.lastY = 0;
+
+    const scene = this.el.sceneEl;
+
+    scene.addEventListener('mousedown', e => {
+      this.isDragging = true;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+    });
+
+    scene.addEventListener('mouseup', () => this.isDragging = false);
+
+    scene.addEventListener('mousemove', e => {
+      if (!this.isDragging) return;
+      this.velocityX = (e.clientX - this.lastX) * 0.01;
+      this.velocityY = (e.clientY - this.lastY) * 0.01;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+    });
+
+    scene.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        this.isDragging = true;
+        this.lastX = e.touches[0].clientX;
+        this.lastY = e.touches[0].clientY;
+      }
+    });
+
+    scene.addEventListener('touchend', () => this.isDragging = false);
+
+    scene.addEventListener('touchmove', e => {
+      if (!this.isDragging || e.touches.length !== 1) return;
+      this.velocityX = (e.touches[0].clientX - this.lastX) * 0.01;
+      this.velocityY = (e.touches[0].clientY - this.lastY) * 0.01;
+      this.lastX = e.touches[0].clientX;
+      this.lastY = e.touches[0].clientY;
+    });
+  },
+
+  tick: function () {
+    this.el.object3D.rotation.y += this.velocityX;
+    this.el.object3D.rotation.x += this.velocityY;
+    this.velocityX *= 0.95;
+    this.velocityY *= 0.95;
+  }
+});
+
+// ================= SMOOTH ZOOM =================
+AFRAME.registerComponent('model-zoom', {
+  init: function () {
+    const model = this.el;
+    let targetScale = 0.8;
+    let lastDistance = null;
+
+    window.addEventListener('wheel', e => {
+      e.preventDefault();
+      targetScale -= e.deltaY * 0.0005;
+      targetScale = Math.max(0.3, Math.min(2.5, targetScale));
+    }, { passive:false });
+
+    window.addEventListener('touchmove', e => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+
+        if (lastDistance) {
+          targetScale += (distance - lastDistance) * 0.002;
+          targetScale = Math.max(0.3, Math.min(2.5, targetScale));
+        }
+
+        lastDistance = distance;
+      }
+    });
+
+    window.addEventListener('touchend', () => {
+      lastDistance = null;
+    });
+
+    this.tick = function () {
+      const scale = model.getAttribute('scale').x;
+      const newScale = THREE.MathUtils.lerp(scale, targetScale, 0.1);
+      model.setAttribute('scale', `${newScale} ${newScale} ${newScale}`);
+    };
+  }
+});
+</script>
+</head>
+
+<body>
+
+<div id="dashboard">
+  <h3>Mini Lathe - Live</h3>
+  <p>Temperature: <b><span id="temp">--</span> °C</b></p>
+  <p>Vibration: <b><span id="vib">--</span> g</b></p>
+  <p>Runtime: <b><span id="runtime">--</span> sec</b></p>
+  <div id="status" class="status">NORMAL</div>
+</div>
+
+<a-scene
+  embedded
+  vr-mode-ui="enabled:false"
+  renderer="antialias:true; alpha:true"
+  arjs="sourceType:webcam; debugUIEnabled:false;">
+
+  <a-entity
+    id="latheModel"
+    gltf-model="water_pump.glb"
+    animation-mixer
+    play-all-animations
+    position="0 0 -1"
+    rotation="0 0 0"
+    scale="1 1 1"
+    drag-rotate
+    model-zoom>
+  </a-entity>
+
+  <a-entity camera></a-entity>
+
+</a-scene>
+
+</body>
+</html>
