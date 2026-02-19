@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
 
-<!-- Firebase v10 -->
+<!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
@@ -23,7 +23,6 @@ const firebaseConfig = {
   messagingSenderId: "100929182719",
   appId: "1:100929182719:web:b7aeb33742e4d169f0a5ca"
 };
-
 
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
@@ -80,33 +79,61 @@ function updateModelColor() {
 </script>
 
 <style>
-body { margin:0; overflow:hidden; font-family:Arial; }
+body {
+  margin:0;
+  overflow:hidden;
+  font-family:Arial;
+}
 
+/* ===== Mobile Top Dashboard ===== */
 #dashboard {
   position:absolute;
   top:10px;
-  left:10px;
-  width:70vw;
-  max-width:260px;
+  left:50%;
+  transform:translateX(-50%);
+  width:90%;
+  max-width:360px;
   background:rgba(0,0,0,0.85);
-  padding:12px;
-  border-radius:10px;
+  padding:10px;
+  border-radius:12px;
   color:white;
   z-index:10;
-  font-size:14px;
+  font-size:13px;
+  box-shadow:0 4px 10px rgba(0,0,0,0.4);
+}
+
+#dashboard h3 {
+  margin:0 0 6px 0;
+  font-size:15px;
+  text-align:center;
+}
+
+/* Data rows */
+.data-row {
+  display:flex;
+  justify-content:space-between;
+  margin:3px 0;
 }
 
 .status {
-  padding:8px;
-  margin-top:10px;
+  padding:6px;
+  margin-top:6px;
   text-align:center;
   font-weight:bold;
   border-radius:6px;
 }
+
+/* Smaller screens */
+@media (max-width:480px){
+  #dashboard {
+    font-size:12px;
+    padding:8px;
+  }
+}
 </style>
 
 <script>
-// ===== PLAY ALL ANIMATIONS =====
+// ===== PLAY ANIMATIONS =====
 AFRAME.registerComponent('play-all-animations', {
   init: function () {
     this.el.addEventListener('model-loaded', () => {
@@ -114,10 +141,7 @@ AFRAME.registerComponent('play-all-animations', {
       if (!mesh.animations || mesh.animations.length === 0) return;
 
       const mixer = new THREE.AnimationMixer(mesh);
-      mesh.animations.forEach((clip) => {
-        mixer.clipAction(clip).play();
-      });
-
+      mesh.animations.forEach((clip) => mixer.clipAction(clip).play());
       this.mixer = mixer;
     });
   },
@@ -126,100 +150,27 @@ AFRAME.registerComponent('play-all-animations', {
   }
 });
 
-// ===== DRAG ROTATE =====
+// ===== TOUCH ROTATE =====
 AFRAME.registerComponent('drag-rotate', {
   init: function () {
     this.isDragging = false;
-    this.velocityX = 0;
-    this.velocityY = 0;
     this.lastX = 0;
-    this.lastY = 0;
 
     const scene = this.el.sceneEl;
 
-    scene.addEventListener('mousedown', e => {
-      this.isDragging = true;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
-    });
-
-    scene.addEventListener('mouseup', () => this.isDragging = false);
-
-    scene.addEventListener('mousemove', e => {
-      if (!this.isDragging) return;
-      this.velocityX = (e.clientX - this.lastX) * 0.01;
-      this.velocityY = (e.clientY - this.lastY) * 0.01;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
-    });
-
-    // Touch
     scene.addEventListener('touchstart', e => {
-      if (e.touches.length === 1) {
-        this.isDragging = true;
-        this.lastX = e.touches[0].clientX;
-        this.lastY = e.touches[0].clientY;
-      }
+      this.isDragging = true;
+      this.lastX = e.touches[0].clientX;
     });
 
     scene.addEventListener('touchend', () => this.isDragging = false);
 
     scene.addEventListener('touchmove', e => {
-      if (!this.isDragging || e.touches.length !== 1) return;
-      this.velocityX = (e.touches[0].clientX - this.lastX) * 0.01;
-      this.velocityY = (e.touches[0].clientY - this.lastY) * 0.01;
+      if (!this.isDragging) return;
+      const dx = (e.touches[0].clientX - this.lastX) * 0.01;
+      this.el.object3D.rotation.y += dx;
       this.lastX = e.touches[0].clientX;
-      this.lastY = e.touches[0].clientY;
     });
-  },
-
-  tick: function () {
-    this.el.object3D.rotation.y += this.velocityX;
-    this.el.object3D.rotation.x += this.velocityY;
-    this.velocityX *= 0.95;
-    this.velocityY *= 0.95;
-  }
-});
-
-// ===== ZOOM (Wheel + Pinch) =====
-AFRAME.registerComponent('model-zoom', {
-  init: function () {
-    const model = this.el;
-    let targetScale = 1;
-    let lastDistance = null;
-
-    // Mouse wheel
-    window.addEventListener('wheel', e => {
-      e.preventDefault();
-      targetScale -= e.deltaY * 0.001;
-      targetScale = Math.max(0.2, Math.min(5, targetScale));
-    }, { passive:false });
-
-    // Pinch zoom
-    window.addEventListener('touchmove', e => {
-      if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-
-        if (lastDistance) {
-          targetScale += (distance - lastDistance) * 0.005;
-          targetScale = Math.max(0.2, Math.min(5, targetScale));
-        }
-
-        lastDistance = distance;
-      }
-    });
-
-    window.addEventListener('touchend', () => {
-      lastDistance = null;
-    });
-
-    this.tick = function () {
-      const scale = model.getAttribute('scale').x;
-      const newScale = THREE.MathUtils.lerp(scale, targetScale, 0.1);
-      model.setAttribute('scale', `${newScale} ${newScale} ${newScale}`);
-    };
   }
 });
 </script>
@@ -228,14 +179,29 @@ AFRAME.registerComponent('model-zoom', {
 
 <body>
 
+<!-- ===== Dashboard ===== -->
 <div id="dashboard">
-  <h3>Pump - Live</h3>
-  <p>Temperature: <b><span id="temp">--</span> °C</b></p>
-  <p>Vibration: <b><span id="vib">--</span> g</b></p>
-  <p>Runtime: <b><span id="runtime">--</span> sec</b></p>
+  <h3>Pump Motor</h3>
+
+  <div class="data-row">
+    <span>Temp:</span>
+    <b><span id="temp">--</span> °C</b>
+  </div>
+
+  <div class="data-row">
+    <span>Vibration:</span>
+    <b><span id="vib">--</span> g</b>
+  </div>
+
+  <div class="data-row">
+    <span>Runtime:</span>
+    <b><span id="runtime">--</span> sec</b>
+  </div>
+
   <div id="status" class="status">NORMAL</div>
 </div>
 
+<!-- ===== AR Scene ===== -->
 <a-scene
   embedded
   vr-mode-ui="enabled:false"
